@@ -42,6 +42,12 @@ class TocDbrEngineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             simulate(SimulationConfig(building_machines=0))
 
+    def test_fractional_machine_equivalents_are_simulated_without_rounding(self):
+        result = simulate(SimulationConfig(flipping_machines=2.5, curing_machines=4.5, backlog=100))
+        self.assertEqual(result["stations"]["Flipping"]["machine_equivalents"], 2.5)
+        self.assertEqual(result["stations"]["Curing"]["machine_equivalents"], 4.5)
+        self.assertGreaterEqual(result["finished_sets"], 0)
+
     def test_invalid_shift_count(self):
         with self.assertRaises(ValueError):
             simulate(SimulationConfig(shifts=4))
