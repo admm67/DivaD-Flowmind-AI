@@ -1,6 +1,7 @@
 import unittest
 
 from scripts.reverse_capacity_engine import calculate_reverse_capacity
+from scripts.toc_dbr_engine import SimulationConfig, simulate
 
 
 class ReverseCapacityEngineTests(unittest.TestCase):
@@ -39,6 +40,15 @@ class ReverseCapacityEngineTests(unittest.TestCase):
         recommendation = result["recommendations"]["fractional"]
         self.assertFalse(recommendation["backlog_sufficient"])
         self.assertFalse(recommendation["feasible"])
+
+    def test_simulator_reports_finished_sets_by_shift(self):
+        result = simulate(SimulationConfig(
+            shifts=2, building_machines=9, cutting_machines=7,
+            flipping_machines=18, curing_machines=38,
+            coding_machines=10, backlog=20,
+        ))
+        self.assertEqual(sum(result["shift_finished_sets"]), result["finished_sets"])
+        self.assertEqual(len(result["shift_finished_sets"]), 2)
 
     def test_whole_mode_uses_integer_machine_counts_at_least_one(self):
         result = calculate_reverse_capacity(
