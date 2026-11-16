@@ -12,11 +12,11 @@ class MachineCapacityApiTests(unittest.TestCase):
             "shift_hours": 8,
             "belts_per_set": 26,
             "planned_belts": {
-                "Building": 11378, "Cutting": None, "Flipping": 13131,
+                "Building": 11378, "Flipping": 13131,
                 "VRC": 10130, "POT": 2021, "Coding": 10000,
             },
             "actual_belts": {
-                "Building": 11274, "Cutting": None, "Flipping": 10179,
+                "Building": 11274, "Flipping": 10179,
                 "VRC": 8792, "POT": 1917, "Coding": 9386,
             },
             "machine_allocations": {
@@ -46,14 +46,14 @@ class MachineCapacityApiTests(unittest.TestCase):
         self.assertEqual(
             example["planned_belts"],
             {
-                "Building": 11378, "Cutting": None, "Flipping": 13131,
+                "Building": 11378, "Flipping": 13131,
                 "VRC": 10130, "POT": 2021, "Coding": 10000,
             },
         )
         self.assertEqual(
             example["actual_belts"],
             {
-                "Building": 11274, "Cutting": None, "Flipping": 10179,
+                "Building": 11274, "Flipping": 10179,
                 "VRC": 8792, "POT": 1917, "Coding": 9386,
             },
         )
