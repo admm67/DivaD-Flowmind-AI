@@ -28,11 +28,11 @@ class ScenarioRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     shifts: int = Field(default=1, ge=1, le=3)
-    building_machines: int = Field(default=1, ge=1, le=50)
-    cutting_machines: int = Field(default=1, ge=1, le=50)
-    flipping_machines: int = Field(default=2, ge=1, le=50)
-    curing_machines: int = Field(default=4, ge=1, le=50)
-    coding_machines: int = Field(default=1, ge=1, le=50)
+    building_machines: float = Field(default=1, ge=0.5, le=50)
+    cutting_machines: float = Field(default=1, ge=0.5, le=50)
+    flipping_machines: float = Field(default=2, ge=0.5, le=50)
+    curing_machines: float = Field(default=4, ge=0.5, le=50)
+    coding_machines: float = Field(default=1, ge=0.5, le=50)
     backlog: int = Field(default=100, ge=0, le=100_000)
 
     def to_config(self) -> SimulationConfig:
@@ -53,10 +53,11 @@ class ActualShiftRequest(BaseModel):
     planned_belts: dict[str, float | None]
     actual_belts: dict[str, float | None]
     machine_allocations: dict[str, float]
+    availability_pct: dict[str, float] = Field(default_factory=dict)
 
 
 class MachineCapacityRequest(ActualShiftRequest):
-    availability_pct: dict[str, float] = Field(default_factory=dict)
+    pass
 
 
 @app.get("/health")
@@ -105,6 +106,7 @@ def actual_shift_calibration(request: ActualShiftRequest) -> dict:
         machine_allocations=request.machine_allocations,
         shift_hours=request.shift_hours,
         belts_per_set=request.belts_per_set,
+        availability_pct=request.availability_pct,
     )
 
 
