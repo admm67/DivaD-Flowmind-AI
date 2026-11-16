@@ -46,6 +46,12 @@ examples/
 tests/
 ```
 
+## Belt manufacturing TOC-DBR module
+
+A preserved browser-based copy of the original [TOC_DBR_Belt](https://github.com/admm67/TOC_DBR_Belt) simulator is being integrated under [apps/toc-dbr](apps/toc-dbr/). The baseline HTML/CSS/JavaScript version models Building → Cutting → Flipping → Curing (Drum) → Coding.
+
+The next engineering phase separates the simulation engine from browser rendering and exposes validated JSON operations so both the browser UI and ChatGPT can run scenarios through a hosted FlowMind API. See [the integration architecture](docs/TOC_DBR_INTEGRATION_ARCHITECTURE.md). The current copied version is a baseline, not yet the AI-connected execution engine.
+
 ## Optional simulator
 ```bash
 python scripts/flow_simulator.py --steps 100 --stations 5 --capacity-min 1 --capacity-max 6 --seed 7
