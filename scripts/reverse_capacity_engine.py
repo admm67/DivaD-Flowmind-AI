@@ -1,9 +1,4 @@
-"""Reverse capacity planning for the FlowMind TOC-DBR simulation.
-
-The engine uses a theoretical utilization-based seed, then validates and
-adjusts allocations with the existing discrete-event simulator. Results are
-planning estimates, not a validated production standard.
-"""
+"""Pool-constrained, balanced-flow reverse capacity and shift planner."""
 from __future__ import annotations
 
 import math
@@ -16,16 +11,23 @@ from scripts.toc_dbr_engine import (
     simulate,
 )
 
-MAX_MACHINE_EQUIVALENTS = 50.0
-DEFAULT_FRACTIONAL_STEP = 0.25
+# Standard installed pools. VRC + POT are intentionally combined for Phase A.
+INSTALLED_MACHINE_POOLS = {
+    "Building": 9,
+    "Cutting": 7,
+    "Flipping": 18,
+    "Curing": 38,  # VRC + POT combined
+    "Coding": 10,
+}
+MAX_SEARCH_ITERATIONS = 2000
 
 
-def _ceil_to_step(value: float, step: float) -> float:
+def _ceil_step(value: float, step: float) -> float:
     return round(math.ceil((value - 1e-10) / step) * step, 4)
 
 
-def _allocation_for_config(allocation: dict[str, float], shifts: int, backlog: int) -> SimulationConfig:
-    return SimulationConfig(
+def _simulate(allocation: dict[str, float], shifts: int, backlog: int) -> dict[str, Any]:
+    return simulate(SimulationConfig(
         shifts=shifts,
         building_machines=allocation["Building"],
         cutting_machines=allocation["Cutting"],
@@ -33,169 +35,205 @@ def _allocation_for_config(allocation: dict[str, float], shifts: int, backlog: i
         curing_machines=allocation["Curing"],
         coding_machines=allocation["Coding"],
         backlog=backlog,
-    )
+    ))
 
 
-def _solve_allocation(
-    target_finished_sets: int,
-    shifts: int,
-    backlog: int,
-    utilization_limit_pct: float,
-    step: float,
+def _evaluate_shift_count(
+    per_shift_target: int, shifts: int, utilization_limit_pct: float,
+    step: float, backlog: int,
 ) -> dict[str, Any]:
-    duration_seconds = shifts * 8 * 3600
-    allowed_busy_seconds = duration_seconds * utilization_limit_pct / 100.0
+    total_target = per_shift_target * shifts
+    duration = shifts * 8 * 3600
     theoretical = {
-        station: target_finished_sets * seconds / allowed_busy_seconds
+        station: total_target * seconds / (duration * utilization_limit_pct / 100)
         for station, seconds in DEFAULT_PROCESSING_SECONDS.items()
     }
     allocation = {
-        station: min(MAX_MACHINE_EQUIVALENTS, max(0.5, _ceil_to_step(value, step)))
+        station: min(float(INSTALLED_MACHINE_POOLS[station]),
+                     max(1.0, _ceil_step(value, step)))
         for station, value in theoretical.items()
     }
 
-    result: dict[str, Any] | None = None
+    result = None
     iterations = 0
-    max_iterations = 1000
-    while iterations < max_iterations:
-        result = simulate(_allocation_for_config(allocation, shifts, backlog))
-        utilizations = {
-            station: result["stations"][station]["calendar_utilization_pct"]
-            for station in STATION_ORDER
+    while iterations < MAX_SEARCH_ITERATIONS:
+        result = _simulate(allocation, shifts, backlog)
+        hourly = result["hourly_completed_sets"]
+        shift_outputs = [
+            sum(hourly[index * 8:(index + 1) * 8])
+            for index in range(shifts)
+        ]
+        utilization = {
+            name: result["stations"][name]["calendar_utilization_pct"]
+            for name in STATION_ORDER
         }
-        within_limit = all(value <= utilization_limit_pct + 1e-9 for value in utilizations.values())
-        target_met = result["finished_sets"] >= target_finished_sets
-        if within_limit and target_met:
+        target_met_each_shift = all(value >= per_shift_target for value in shift_outputs)
+        within = all(value <= utilization_limit_pct + 1e-9 for value in utilization.values())
+        if target_met_each_shift and within:
             break
 
-        overloaded = [
-            station for station in STATION_ORDER
-            if utilizations[station] > utilization_limit_pct + 1e-9
-        ]
+        overloaded = [name for name in STATION_ORDER
+                      if utilization[name] > utilization_limit_pct + 1e-9
+                      and allocation[name] + step <= INSTALLED_MACHINE_POOLS[name] + 1e-9]
         if not overloaded:
-            # Flow effects can limit output even when no station breaches the
-            # utilization ceiling. Increase the busiest station first.
-            overloaded = [max(STATION_ORDER, key=lambda name: utilizations[name])]
-
+            # Increase the most heavily loaded station that still has pool headroom.
+            candidates = [name for name in STATION_ORDER
+                          if allocation[name] + step <= INSTALLED_MACHINE_POOLS[name] + 1e-9]
+            if not candidates:
+                break
+            overloaded = [max(candidates, key=lambda name: utilization[name])]
         changed = False
-        for station in overloaded:
-            if allocation[station] + step <= MAX_MACHINE_EQUIVALENTS + 1e-9:
-                allocation[station] = round(allocation[station] + step, 4)
+        for name in overloaded:
+            next_value = min(float(INSTALLED_MACHINE_POOLS[name]), allocation[name] + step)
+            if next_value > allocation[name]:
+                allocation[name] = round(next_value, 4)
                 changed = True
         if not changed:
             break
         iterations += 1
 
     if result is None:
-        result = simulate(_allocation_for_config(allocation, shifts, backlog))
+        result = _simulate(allocation, shifts, backlog)
 
-    station_rows = {}
-    for station in STATION_ORDER:
-        row = result["stations"][station]
-        station_rows[station] = {
-            "theoretical_machine_equivalents": round(theoretical[station], 3),
-            "recommended_machine_equivalents": allocation[station],
+    hourly = result["hourly_completed_sets"]
+    shift_outputs = [
+        sum(hourly[index * 8:(index + 1) * 8])
+        for index in range(shifts)
+    ]
+    station_analysis = {}
+    for name in STATION_ORDER:
+        row = result["stations"][name]
+        station_analysis[name] = {
+            "theoretical_machine_equivalents": round(theoretical[name], 3),
+            "recommended_machine_equivalents": allocation[name],
+            "installed_pool": INSTALLED_MACHINE_POOLS[name],
+            "pool_headroom": round(INSTALLED_MACHINE_POOLS[name] - allocation[name], 4),
             "utilization_pct": row["calendar_utilization_pct"],
-            "utilization_limit_pct": utilization_limit_pct,
             "within_utilization_limit": row["calendar_utilization_pct"] <= utilization_limit_pct,
             "queue_wip_end": row["queue_wip_end"],
             "in_process_end": row["in_process_end"],
             "completed_sets": row["completed_sets"],
         }
 
-    target_met = result["finished_sets"] >= target_finished_sets
-    all_within = all(row["within_utilization_limit"] for row in station_rows.values())
-    backlog_sufficient = backlog >= target_finished_sets
-    feasible = target_met and all_within and backlog_sufficient
+    each_shift_met = all(value >= per_shift_target for value in shift_outputs)
+    all_within = all(row["within_utilization_limit"] for row in station_analysis.values())
+    pool_respected = all(
+        allocation[name] <= INSTALLED_MACHINE_POOLS[name] for name in STATION_ORDER
+    )
+    balanced_flow = result["end_wip"] == 0
+    feasible = each_shift_met and all_within and pool_respected and balanced_flow
     return {
+        "shifts_required": shifts if feasible else None,
+        "tested_shifts": shifts,
+        "per_shift_target_sets": per_shift_target,
+        "total_target_sets": total_target,
+        "shift_outputs_sets": shift_outputs,
         "recommended_machine_allocation": allocation,
-        "station_analysis": station_rows,
+        "installed_machine_pools": INSTALLED_MACHINE_POOLS,
+        "station_analysis": station_analysis,
         "simulation": result,
-        "target_achieved": target_met,
+        "target_met_each_shift": each_shift_met,
         "all_stations_within_utilization_limit": all_within,
-        "backlog_sufficient": backlog_sufficient,
+        "machine_pools_respected": pool_respected,
+        "balanced_flow_no_end_wip": balanced_flow,
+        "capacity_gap_sets_by_shift": [
+            max(0, per_shift_target - value) for value in shift_outputs
+        ],
         "feasible": feasible,
-        "capacity_gap_sets": max(0, target_finished_sets - result["finished_sets"]),
         "iterations": iterations,
         "search_step_machine_equivalents": step,
-        "status": "feasible" if feasible else "not_feasible_with_search_limits_or_backlog",
+        "status": "feasible" if feasible else "pool_or_flow_limited",
     }
 
 
 def calculate_reverse_capacity(
     target_finished_sets: int,
     utilization_limit_pct: float = 85.0,
-    shifts: int = 1,
+    shifts: int = 3,
     backlog: int | None = None,
     allocation_mode: str = "both",
 ) -> dict[str, Any]:
-    """Calculate fractional and/or whole machine requirements for a shift target.
+    """Find the minimum feasible number of consecutive 8-hour shifts.
 
-    The existing simulator models fixed 8-hour shifts. If backlog is omitted,
-    it is set equal to the requested finished-set target.
+    target_finished_sets is the required finished output in EACH shift.
+    'shifts' is the maximum number of shifts to evaluate (1-3). Machine pools
+    are fixed plant-wide pools reused by each successive shift.
     """
     if isinstance(target_finished_sets, bool) or not isinstance(target_finished_sets, int) or target_finished_sets < 1:
         raise ValueError("target_finished_sets must be a positive integer")
     if isinstance(shifts, bool) or not isinstance(shifts, int) or shifts not in (1, 2, 3):
-        raise ValueError("shifts must be 1, 2, or 3")
-    if not isinstance(utilization_limit_pct, (int, float)) or isinstance(utilization_limit_pct, bool) or not 1 <= utilization_limit_pct <= 100:
+        raise ValueError("shifts (maximum shifts to evaluate) must be 1, 2, or 3")
+    if isinstance(utilization_limit_pct, bool) or not isinstance(utilization_limit_pct, (int, float)) or not 1 <= utilization_limit_pct <= 100:
         raise ValueError("utilization_limit_pct must be between 1 and 100")
     if allocation_mode not in ("both", "fractional", "whole"):
         raise ValueError("allocation_mode must be 'both', 'fractional', or 'whole'")
     if backlog is None:
-        backlog = target_finished_sets
+        backlog = target_finished_sets * shifts
     if isinstance(backlog, bool) or not isinstance(backlog, int) or not 0 <= backlog <= 100_000:
         raise ValueError("backlog must be an integer between 0 and 100000")
 
-    duration_seconds = shifts * 8 * 3600
-    theoretical = {
-        station: round(
-            target_finished_sets * seconds / (duration_seconds * utilization_limit_pct / 100.0), 3
-        )
-        for station, seconds in DEFAULT_PROCESSING_SECONDS.items()
-    }
-    response: dict[str, Any] = {
-        "engine": "FlowMind Reverse Capacity Engine",
-        "engine_version": "0.1.0",
-        "target_finished_sets": target_finished_sets,
+    modes = {}
+    for mode, step in (("fractional", 0.25), ("whole", 1.0)):
+        if allocation_mode not in ("both", mode):
+            continue
+        trials = []
+        for shift_count in range(1, shifts + 1):
+            required_backlog = target_finished_sets * shift_count
+            available_backlog = min(backlog, required_backlog) if backlog >= required_backlog else backlog
+            trials.append(_evaluate_shift_count(
+                target_finished_sets, shift_count, float(utilization_limit_pct),
+                step, available_backlog,
+            ))
+            if trials[-1]["feasible"]:
+                break
+        feasible = next((item for item in trials if item["feasible"]), None)
+        best = feasible or max(trials, key=lambda item: (
+            min(item["shift_outputs_sets"]) if item["shift_outputs_sets"] else 0,
+            item["simulation"]["finished_sets"],
+        ))
+        modes[mode] = {
+            **best,
+            "minimum_shifts_found": feasible is not None,
+            "evaluated_shift_options": [
+                {
+                    "shifts": item["tested_shifts"],
+                    "shift_outputs_sets": item["shift_outputs_sets"],
+                    "feasible": item["feasible"],
+                    "capacity_gap_sets_by_shift": item["capacity_gap_sets_by_shift"],
+                } for item in trials
+            ],
+        }
+
+    return {
+        "engine": "FlowMind Reverse Capacity & Shift Planner",
+        "engine_version": "0.2.0",
+        "target_finished_sets_per_shift": target_finished_sets,
         "shift_hours": 8,
-        "shifts": shifts,
-        "duration_seconds": duration_seconds,
+        "maximum_shifts_to_evaluate": shifts,
         "utilization_limit_pct": float(utilization_limit_pct),
         "allocation_mode": allocation_mode,
-        "backlog": backlog,
-        "theoretical_machine_equivalents": theoretical,
-        "method": (
-            "Theoretical seed = target sets × processing seconds per set / "
-            "scheduled shift seconds at the utilization limit. Each allocation "
-            "is then forward-simulated and increased in the selected step until "
-            "the target and utilization conditions are met or the 50-equivalent "
-            "per-station search limit is reached."
+        "backlog_available": backlog,
+        "machine_pool_policy": "hard_limit",
+        "installed_machine_pools": INSTALLED_MACHINE_POOLS,
+        "curing_pool_definition": "VRC + POT combined (Phase A); separate VRC/POT stages reserved for Phase B",
+        "priority": "balanced_line_flow",
+        "recommendations": modes,
+        "overall_status": (
+            "feasible_within_installed_pools"
+            if all(item["minimum_shifts_found"] for item in modes.values())
+            else "demand_not_met_within_shift_search_or_backlog"
         ),
-        "recommendations": {},
+        "method": (
+            "Test one through the maximum permitted consecutive shifts. For each option, "
+            "reuse the installed machine pool on each successive shift, cap every station "
+            "at its installed pool, simulate the full line, and require the per-shift output "
+            "target and utilization ceiling in every shift."
+        ),
+        "model_limitations": [
+            "VRC and POT are combined as one 38-machine Curing pool in Phase A.",
+            "The current simulator models successive shifts with the same machine allocation per shift.",
+            "No scrap, rework, downtime, setup losses, quality holds, replenishment, or finite buffer blocking.",
+            "Balanced flow is screened using per-shift finished output and zero end WIP; this is not a validated production standard.",
+            "Machine pool is reused across successive shifts, not multiplied by shift count.",
+        ],
     }
-
-    if allocation_mode in ("both", "fractional"):
-        response["recommendations"]["fractional"] = _solve_allocation(
-            target_finished_sets, shifts, backlog, float(utilization_limit_pct),
-            DEFAULT_FRACTIONAL_STEP,
-        )
-    if allocation_mode in ("both", "whole"):
-        response["recommendations"]["whole"] = _solve_allocation(
-            target_finished_sets, shifts, backlog, float(utilization_limit_pct), 1.0
-        )
-
-    response["overall_status"] = (
-        "feasible_in_all_requested_modes"
-        if all(item["feasible"] for item in response["recommendations"].values())
-        else "one_or_more_modes_not_feasible"
-    )
-    response["model_limitations"] = [
-        "Uses the existing deterministic finite-backlog simulator and its current break rules.",
-        "Assumes no scrap, rework, downtime, setup losses, quality holds, or replenishment.",
-        "Uses the simulator's current fractional-machine partial-shift semantics.",
-        "The 85% ceiling is checked against simulated calendar utilization, not only the theoretical formula.",
-        "Does not yet enforce installed-machine-pool limits; compare recommendations with actual installed assets.",
-        "A feasible simulation is a planning result, not proof of a validated production standard.",
-    ]
-    return response
