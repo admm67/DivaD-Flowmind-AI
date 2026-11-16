@@ -78,3 +78,26 @@ def run_simulation(request: ScenarioRequest) -> dict:
 @app.post("/simulation/scenarios/compare")
 def compare(request: CompareRequest) -> dict:
     return compare_scenarios(request.baseline.to_config(), request.proposed.to_config())
+
+from scripts.actual_shift_calibration import calibrate_actual_shift
+
+
+class ActualShiftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    shift_hours: float = Field(default=8, gt=0, le=24)
+    belts_per_set: int = Field(default=26, ge=1, le=100)
+    planned_belts: dict[str, float | None]
+    actual_belts: dict[str, float | None]
+    machine_allocations: dict[str, float]
+
+
+@app.post("/calibration/actual-shift")
+def actual_shift_calibration(request: ActualShiftRequest) -> dict:
+    return calibrate_actual_shift(
+        planned_belts=request.planned_belts,
+        actual_belts=request.actual_belts,
+        machine_allocations=request.machine_allocations,
+        shift_hours=request.shift_hours,
+        belts_per_set=request.belts_per_set,
+    )
