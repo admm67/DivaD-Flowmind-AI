@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use FlowMind AI, please cite this repository."
+title: "DivaD FlowMind AI"
+type: software
+authors:
+  - family-names: "DivaD"
+version: "0.1.0"
+date-released: "2026-11-16"
+license: MIT
