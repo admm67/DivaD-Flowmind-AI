@@ -1,7 +1,7 @@
 """HTTP API for the FlowMind TOC-DBR simulation engine."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 
 from scripts.toc_dbr_engine import (
@@ -56,43 +56,6 @@ class ActualShiftRequest(BaseModel):
 
 
 class MachineCapacityRequest(ActualShiftRequest):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "shift_hours": 8,
-                    "belts_per_set": 26,
-                    "planned_belts": {
-                        "Building": 11378,
-                        "Cutting": None,
-                        "Flipping": 13131,
-                        "VRC": 10130,
-                        "POT": 2021,
-                        "Coding": 10000,
-                    },
-                    "actual_belts": {
-                        "Building": 11274,
-                        "Cutting": None,
-                        "Flipping": 10179,
-                        "VRC": 8792,
-                        "POT": 1917,
-                        "Coding": 9386,
-                    },
-                    "machine_allocations": {
-                        "Building": 7,
-                        "Cutting": 3.5,
-                        "Flipping": 11.5,
-                        "VRC": 23,
-                        "POT": 4,
-                        "Coding": 9,
-                    },
-                    "availability_pct": {},
-                }
-            ]
-        },
-    )
-
     availability_pct: dict[str, float] = Field(default_factory=dict)
 
 
@@ -146,7 +109,45 @@ def actual_shift_calibration(request: ActualShiftRequest) -> dict:
 
 
 @app.post("/capacity/analyze")
-def machine_capacity_analysis(request: MachineCapacityRequest) -> dict:
+def machine_capacity_analysis(
+    request: MachineCapacityRequest = Body(
+        openapi_examples={
+            "shift_2_actual": {
+                "summary": "16 November 2026 — Shift 2 actual data",
+                "description": "Cutting planned and actual quantities are unknown and intentionally shown as null.",
+                "value": {
+    "shift_hours": 8,
+    "belts_per_set": 26,
+    "planned_belts": {
+        "Building": 11378,
+        "Cutting": null,
+        "Flipping": 13131,
+        "VRC": 10130,
+        "POT": 2021,
+        "Coding": 10000
+    },
+    "actual_belts": {
+        "Building": 11274,
+        "Cutting": null,
+        "Flipping": 10179,
+        "VRC": 8792,
+        "POT": 1917,
+        "Coding": 9386
+    },
+    "machine_allocations": {
+        "Building": 7,
+        "Cutting": 3.5,
+        "Flipping": 11.5,
+        "VRC": 23,
+        "POT": 4,
+        "Coding": 9
+    },
+    "availability_pct": {}
+},
+            }
+        }
+    )
+) -> dict:
     return analyze_machine_capacity(
         planned_belts=request.planned_belts,
         actual_belts=request.actual_belts,
