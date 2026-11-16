@@ -26,6 +26,19 @@ class SimulationApiFractionalMachineTests(unittest.TestCase):
         self.assertEqual(response.json()["baseline"]["configuration"]["flipping_machines"], 2.5)
         self.assertEqual(response.json()["proposed"]["configuration"]["curing_machines"], 4.5)
 
+    def test_reverse_capacity_endpoint_returns_both_modes(self):
+        response = client.post("/capacity/reverse", json={
+            "target_finished_sets": 8,
+            "utilization_limit_pct": 85,
+            "shifts": 1,
+            "backlog": 8,
+            "allocation_mode": "both",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("fractional", response.json()["recommendations"])
+        self.assertIn("whole", response.json()["recommendations"])
+
+
     def test_actual_shift_calibration_accepts_availability_pct(self):
         response = client.post("/calibration/actual-shift", json={
             "planned_belts": {"Building": 260},

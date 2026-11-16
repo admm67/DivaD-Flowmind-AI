@@ -15,6 +15,7 @@ from scripts.toc_dbr_engine import (
 )
 from scripts.actual_shift_calibration import calibrate_actual_shift
 from scripts.machine_capacity_analysis import analyze_machine_capacity
+from scripts.reverse_capacity_engine import calculate_reverse_capacity
 
 
 app = FastAPI(
@@ -43,6 +44,16 @@ class CompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     baseline: ScenarioRequest
     proposed: ScenarioRequest
+
+
+class ReverseCapacityRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_finished_sets: int = Field(ge=1, le=100_000)
+    utilization_limit_pct: float = Field(default=85, ge=1, le=100)
+    shifts: int = Field(default=1, ge=1, le=3)
+    backlog: int | None = Field(default=None, ge=0, le=100_000)
+    allocation_mode: str = Field(default="both", pattern="^(both|fractional|whole)$")
 
 
 class ActualShiftRequest(BaseModel):
@@ -96,6 +107,17 @@ def run_simulation(request: ScenarioRequest) -> dict:
 @app.post("/simulation/scenarios/compare")
 def compare(request: CompareRequest) -> dict:
     return compare_scenarios(request.baseline.to_config(), request.proposed.to_config())
+
+
+@app.post("/capacity/reverse")
+def reverse_capacity_calculation(request: ReverseCapacityRequest) -> dict:
+    return calculate_reverse_capacity(
+        target_finished_sets=request.target_finished_sets,
+        utilization_limit_pct=request.utilization_limit_pct,
+        shifts=request.shifts,
+        backlog=request.backlog,
+        allocation_mode=request.allocation_mode,
+    )
 
 
 @app.post("/calibration/actual-shift")
