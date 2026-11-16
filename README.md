@@ -58,6 +58,8 @@ The Python engine is an initial model, not yet a validated production digital tw
 ### Run the API on a hosted Python service
 The repository includes a `render.yaml` blueprint. To deploy this branch on Render, create a new Blueprint instance from this repository and select `feature/toc-dbr-engine`. The API start command is `uvicorn api.main:app --host 0.0.0.0 --port $PORT`. Do not expose privileged credentials in browser code.
 
+https://flowmind-toc-dbr-api-ru1w.onrender.com
+
 ## Optional simulator
 ```bash
 python scripts/flow_simulator.py --steps 100 --stations 5 --capacity-min 1 --capacity-max 6 --seed 7
