@@ -43,21 +43,27 @@ references/
 scripts/
 templates/
 examples/
+apps/toc-dbr/
 tests/
 ```
 
 ## Belt manufacturing TOC-DBR module
 
-A preserved browser-based copy of the original [TOC_DBR_Belt](https://github.com/admm67/TOC_DBR_Belt) simulator is being integrated under [apps/toc-dbr](apps/toc-dbr/). The baseline HTML/CSS/JavaScript version models Building → Cutting → Flipping → Curing (Drum) → Coding.
+A preserved browser-based copy of the original [TOC_DBR_Belt](https://github.com/admm67/TOC_DBR_Belt) simulator is integrated under [apps/toc-dbr](apps/toc-dbr/). The baseline HTML/CSS/JavaScript version models Building → Cutting → Flipping → Curing (Drum) → Coding.
 
-The next engineering phase separates the simulation engine from browser rendering and exposes validated JSON operations so both the browser UI and ChatGPT can run scenarios through a hosted FlowMind API. See [the integration architecture](docs/TOC_DBR_INTEGRATION_ARCHITECTURE.md). The current copied version is a baseline, not yet the AI-connected execution engine.
+A first deterministic Python discrete-event engine is now available at [scripts/toc_dbr_engine.py](scripts/toc_dbr_engine.py), with automated checks in [tests/test_toc_dbr_engine.py](tests/test_toc_dbr_engine.py). It provides finite-backlog simulation and scenario comparison. The screenshot observations from the legacy browser runs are recorded in [the validation note](docs/TOC_DBR_BROWSER_RUN_OBSERVATIONS.md); they are not treated as golden expected outputs because the legacy report values do not reconcile.
+
+The Python engine is an initial model, not yet a validated production digital twin. A FastAPI service is now available in `api/main.py` with `/health`, `/simulation/defaults`, `/simulation/run`, and `/simulation/scenarios/compare` endpoints. The browser UI and ChatGPT are not yet connected. See [the integration architecture](docs/TOC_DBR_INTEGRATION_ARCHITECTURE.md).
+
+### Run the API on a hosted Python service
+The repository includes a `render.yaml` blueprint. To deploy this branch on Render, create a new Blueprint instance from this repository and select `feature/toc-dbr-engine`. The API start command is `uvicorn api.main:app --host 0.0.0.0 --port $PORT`. Do not expose privileged credentials in browser code.
 
 ## Optional simulator
 ```bash
 python scripts/flow_simulator.py --steps 100 --stations 5 --capacity-min 1 --capacity-max 6 --seed 7
 python -m unittest discover -s tests -v
 ```
-The simulator is an educational model, not a validated production scheduler or digital twin.
+The generic flow simulator is an educational model, not a validated production scheduler or digital twin.
 
 ## Scope and safety
 FlowMind is decision support, not an autonomous plant controller, certified engineering system, financial adviser, or substitute for qualified review. Validate recommendations against local data, procedures, standards, and safety requirements. Never bypass guards, interlocks, permits, quality gates, or legal controls.
