@@ -92,6 +92,7 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
     now = 0.0
     wip_area = 0.0
     finished = 0
+    shift_finished = [0 for _ in range(config.shifts)]
 
     def dispatch(at: float) -> None:
         # A completion exactly at shift end is counted, but must not start another job.
@@ -137,6 +138,10 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
             if station == "Coding":
                 finished += 1
                 hourly[min(int(finish // 3600), len(hourly) - 1)] += 1
+                # A completion exactly at a shift boundary belongs to the shift
+                # that just ended, not the next shift.
+                shift_index = min(int(max(0.0, finish - 1e-9) // (8 * 3600)), config.shifts - 1)
+                shift_finished[shift_index] += 1
             else:
                 downstream = STATION_ORDER[STATION_ORDER.index(station) + 1]
                 queues[downstream] += 1
@@ -173,6 +178,7 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
         "configuration": asdict(config),
         "duration_seconds": duration,
         "finished_sets": finished,
+        "shift_finished_sets": shift_finished,
         "throughput_sets_per_hour": round(finished / hours, 4),
         "hourly_completed_sets": hourly,
         "end_wip": end_wip,

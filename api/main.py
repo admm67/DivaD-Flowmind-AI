@@ -49,10 +49,10 @@ class CompareRequest(BaseModel):
 class ReverseCapacityRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    target_finished_sets: int = Field(ge=1, le=100_000)
+    target_finished_sets: int = Field(ge=1, le=100_000, description="Required finished sets in EACH 8-hour shift")
     utilization_limit_pct: float = Field(default=85, ge=1, le=100)
-    shifts: int = Field(default=1, ge=1, le=3)
-    backlog: int | None = Field(default=None, ge=0, le=100_000)
+    shifts: int = Field(default=3, ge=1, le=3, description="Maximum consecutive shifts to evaluate; engine selects the minimum feasible count")
+    backlog: int | None = Field(default=None, ge=0, le=100_000, description="Available demand backlog; defaults to target sets multiplied by maximum shifts")
     allocation_mode: str = Field(default="both", pattern="^(both|fractional|whole)$")
 
 
@@ -110,7 +110,23 @@ def compare(request: CompareRequest) -> dict:
 
 
 @app.post("/capacity/reverse")
-def reverse_capacity_calculation(request: ReverseCapacityRequest) -> dict:
+def reverse_capacity_calculation(
+    request: ReverseCapacityRequest = Body(
+        openapi_examples={
+            "480_sets_per_shift_with_pool_limits": {
+                "summary": "480 finished sets per shift; enforce installed machine pools",
+                "description": "The planner selects the minimum number of successive shifts (up to 3), reusing the installed machine pools and prioritizing balanced line flow.",
+                "value": {
+                    "target_finished_sets": 480,
+                    "utilization_limit_pct": 85,
+                    "shifts": 3,
+                    "backlog": 1440,
+                    "allocation_mode": "both"
+                }
+            }
+        }
+    )
+) -> dict:
     return calculate_reverse_capacity(
         target_finished_sets=request.target_finished_sets,
         utilization_limit_pct=request.utilization_limit_pct,

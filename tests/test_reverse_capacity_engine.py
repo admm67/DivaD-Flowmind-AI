@@ -1,6 +1,7 @@
 import unittest
 
 from scripts.reverse_capacity_engine import calculate_reverse_capacity
+from scripts.toc_dbr_engine import SimulationConfig, simulate
 
 
 class ReverseCapacityEngineTests(unittest.TestCase):
@@ -39,6 +40,53 @@ class ReverseCapacityEngineTests(unittest.TestCase):
         recommendation = result["recommendations"]["fractional"]
         self.assertFalse(recommendation["backlog_sufficient"])
         self.assertFalse(recommendation["feasible"])
+
+    def test_simulator_reports_finished_sets_by_shift(self):
+        result = simulate(SimulationConfig(
+            shifts=2, building_machines=9, cutting_machines=7,
+            flipping_machines=18, curing_machines=38,
+            coding_machines=10, backlog=20,
+        ))
+        self.assertEqual(sum(result["shift_finished_sets"]), result["finished_sets"])
+        self.assertEqual(len(result["shift_finished_sets"]), 2)
+
+    def test_whole_mode_uses_integer_machine_counts_at_least_one(self):
+        result = calculate_reverse_capacity(
+            target_finished_sets=1,
+            utilization_limit_pct=85,
+            shifts=1,
+            backlog=1,
+            allocation_mode="whole",
+        )
+        allocation = result["recommendations"]["whole"]["recommended_machine_allocation"]
+        for value in allocation.values():
+            self.assertGreaterEqual(value, 1)
+            self.assertEqual(value, int(value))
+
+    def test_installed_machine_pools_are_hard_limits(self):
+        result = calculate_reverse_capacity(
+            target_finished_sets=480,
+            utilization_limit_pct=85,
+            shifts=3,
+            backlog=1440,
+            allocation_mode="both",
+        )
+        for recommendation in result["recommendations"].values():
+            for station, value in recommendation["recommended_machine_allocation"].items():
+                self.assertLessEqual(value, recommendation["installed_machine_pools"][station])
+            self.assertEqual(recommendation["per_shift_target_sets"], 480)
+
+    def test_shift_planner_reports_minimum_shift_count(self):
+        result = calculate_reverse_capacity(
+            target_finished_sets=480,
+            utilization_limit_pct=85,
+            shifts=3,
+            backlog=1440,
+            allocation_mode="whole",
+        )
+        recommendation = result["recommendations"]["whole"]
+        self.assertIn(recommendation["tested_shifts"], (1, 2, 3))
+        self.assertEqual(len(recommendation["shift_outputs_sets"]), recommendation["tested_shifts"])
 
     def test_invalid_allocation_mode_is_rejected(self):
         with self.assertRaises(ValueError):
