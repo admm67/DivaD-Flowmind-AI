@@ -65,6 +65,19 @@ The manual browser screenshots show hourly totals that do not reconcile consiste
 
 Do not use those legacy report figures as golden tests or as investment/capacity recommendations.
 
+## API implementation
+
+The first FastAPI implementation is available in `api/main.py`:
+
+- `GET /health` — service status and engine version.
+- `GET /simulation/defaults` — station order, processing times, default configuration, and break rules.
+- `POST /simulation/run` — validate and run one scenario.
+- `POST /simulation/scenarios/compare` — compare baseline and proposed configurations.
+
+Request schemas reject unknown fields and validate shifts, machine counts, and backlog bounds. Run locally with `pip install -r requirements.txt` followed by `uvicorn api.main:app --host 0.0.0.0 --port 8000`. Interactive API documentation is exposed at `/docs` by FastAPI.
+
+A Render Blueprint is provided in `render.yaml`. Deployment and public access still require the repository owner to create/authorize the Render service and configure any required access controls.
+
 ## Proposed API surface
 
 - `GET /health` — service status and engine version.
