@@ -120,7 +120,7 @@ def machine_capacity_analysis(
     "belts_per_set": 26,
     "planned_belts": {
         "Building": 11378,
-        "Cutting": null,
+        "Cutting": None,
         "Flipping": 13131,
         "VRC": 10130,
         "POT": 2021,
@@ -128,7 +128,7 @@ def machine_capacity_analysis(
     },
     "actual_belts": {
         "Building": 11274,
-        "Cutting": null,
+        "Cutting": None,
         "Flipping": 10179,
         "VRC": 8792,
         "POT": 1917,
