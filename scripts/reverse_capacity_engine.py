@@ -113,7 +113,8 @@ def _evaluate_shift_count(
         allocation[name] <= INSTALLED_MACHINE_POOLS[name] for name in STATION_ORDER
     )
     balanced_flow = result["end_wip"] == 0
-    feasible = each_shift_met and all_within and pool_respected and balanced_flow
+    backlog_sufficient = backlog >= total_target
+    feasible = each_shift_met and all_within and pool_respected and balanced_flow and backlog_sufficient
     return {
         "shifts_required": shifts if feasible else None,
         "tested_shifts": shifts,
@@ -128,6 +129,7 @@ def _evaluate_shift_count(
         "all_stations_within_utilization_limit": all_within,
         "machine_pools_respected": pool_respected,
         "balanced_flow_no_end_wip": balanced_flow,
+        "backlog_sufficient": backlog_sufficient,
         "capacity_gap_sets_by_shift": [
             max(0, per_shift_target - value) for value in shift_outputs
         ],
@@ -199,6 +201,7 @@ def calculate_reverse_capacity(
     return {
         "engine": "FlowMind Reverse Capacity & Shift Planner",
         "engine_version": "0.2.0",
+        "target_finished_sets": target_finished_sets,
         "target_finished_sets_per_shift": target_finished_sets,
         "shift_hours": 8,
         "maximum_shifts_to_evaluate": shifts,
