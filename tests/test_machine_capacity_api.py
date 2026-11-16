@@ -42,7 +42,7 @@ class MachineCapacityApiTests(unittest.TestCase):
 
     def test_openapi_capacity_example_uses_actual_shift_process_names_and_values(self):
         schema = client.get("/openapi.json").json()
-        example = schema["components"]["schemas"]["MachineCapacityRequest"]["examples"][0]
+        example = schema["paths"]["/capacity/analyze"]["post"]["requestBody"]["content"]["application/json"]["examples"]["shift_2_actual"]["value"]
         self.assertEqual(
             example["planned_belts"],
             {
