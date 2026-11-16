@@ -58,11 +58,7 @@ def _evaluate_shift_count(
     iterations = 0
     while iterations < MAX_SEARCH_ITERATIONS:
         result = _simulate(allocation, shifts, backlog)
-        hourly = result["hourly_completed_sets"]
-        shift_outputs = [
-            sum(hourly[index * 8:(index + 1) * 8])
-            for index in range(shifts)
-        ]
+        shift_outputs = result["shift_finished_sets"]
         utilization = {
             name: result["stations"][name]["calendar_utilization_pct"]
             for name in STATION_ORDER
@@ -95,11 +91,7 @@ def _evaluate_shift_count(
     if result is None:
         result = _simulate(allocation, shifts, backlog)
 
-    hourly = result["hourly_completed_sets"]
-    shift_outputs = [
-        sum(hourly[index * 8:(index + 1) * 8])
-        for index in range(shifts)
-    ]
+    shift_outputs = result["shift_finished_sets"]
     station_analysis = {}
     for name in STATION_ORDER:
         row = result["stations"][name]
