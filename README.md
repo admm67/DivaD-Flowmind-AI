@@ -1,4 +1,4 @@
-# FlowMind AI
+# DivaD FlowMind AI
 
 **A portable AI skill for systems thinking, Theory of Constraints, root-cause analysis, flow improvement, and decision execution.**
 
