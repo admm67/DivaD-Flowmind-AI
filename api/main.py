@@ -56,6 +56,43 @@ class ActualShiftRequest(BaseModel):
 
 
 class MachineCapacityRequest(ActualShiftRequest):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "shift_hours": 8,
+                    "belts_per_set": 26,
+                    "planned_belts": {
+                        "Building": 11378,
+                        "Cutting": None,
+                        "Flipping": 13131,
+                        "VRC": 10130,
+                        "POT": 2021,
+                        "Coding": 10000,
+                    },
+                    "actual_belts": {
+                        "Building": 11274,
+                        "Cutting": None,
+                        "Flipping": 10179,
+                        "VRC": 8792,
+                        "POT": 1917,
+                        "Coding": 9386,
+                    },
+                    "machine_allocations": {
+                        "Building": 7,
+                        "Cutting": 3.5,
+                        "Flipping": 11.5,
+                        "VRC": 23,
+                        "POT": 4,
+                        "Coding": 9,
+                    },
+                    "availability_pct": {},
+                }
+            ]
+        },
+    )
+
     availability_pct: dict[str, float] = Field(default_factory=dict)
 
 
