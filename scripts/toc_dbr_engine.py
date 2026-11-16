@@ -94,6 +94,9 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
     finished = 0
 
     def dispatch(at: float) -> None:
+        # A completion exactly at shift end is counted, but must not start another job.
+        if at >= duration:
+            return
         active_break = _active_break(at, breaks)
         for station in STATION_ORDER:
             capacity = machines[station]
