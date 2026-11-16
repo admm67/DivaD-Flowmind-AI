@@ -40,6 +40,32 @@ class MachineCapacityApiTests(unittest.TestCase):
             data["processes"]["Cutting"]["planned_workload"]["required_machine_hours"]
         )
 
+    def test_openapi_capacity_example_uses_actual_shift_process_names_and_values(self):
+        schema = client.get("/openapi.json").json()
+        example = schema["components"]["schemas"]["MachineCapacityRequest"]["examples"][0]
+        self.assertEqual(
+            example["planned_belts"],
+            {
+                "Building": 11378, "Cutting": None, "Flipping": 13131,
+                "VRC": 10130, "POT": 2021, "Coding": 10000,
+            },
+        )
+        self.assertEqual(
+            example["actual_belts"],
+            {
+                "Building": 11274, "Cutting": None, "Flipping": 10179,
+                "VRC": 8792, "POT": 1917, "Coding": 9386,
+            },
+        )
+        self.assertEqual(
+            example["machine_allocations"],
+            {
+                "Building": 7, "Cutting": 3.5, "Flipping": 11.5,
+                "VRC": 23, "POT": 4, "Coding": 9,
+            },
+        )
+        self.assertEqual(example["availability_pct"], {})
+
     def test_capacity_endpoint_accepts_explicit_availability(self):
         payload = {
             "planned_belts": {"Building": 260},
