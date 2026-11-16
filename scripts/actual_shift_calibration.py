@@ -17,11 +17,13 @@ def calibrate_actual_shift(
     machine_allocations: dict[str, float],
     shift_hours: float = 8,
     belts_per_set: int = DEFAULT_BELTS_PER_SET,
+    availability_pct: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     if shift_hours <= 0:
         raise ValueError("shift_hours must be positive")
     if belts_per_set <= 0:
         raise ValueError("belts_per_set must be positive")
+    availability_pct = availability_pct or {}
     rows: dict[str, Any] = {}
     for process in PROCESS_ORDER:
         planned = planned_belts.get(process)
@@ -38,6 +40,8 @@ def calibrate_actual_shift(
             "gap_sets": round((planned - actual) / belts_per_set, 4) if planned is not None and actual is not None else None,
             "machine_equivalents": machines,
             "scheduled_machine_hours": round(machines * shift_hours, 3) if machines is not None else None,
+            "availability_pct": availability_pct.get(process, 100.0) if machines is not None else None,
+            "effective_available_machine_hours": round(machines * shift_hours * availability_pct.get(process, 100.0) / 100.0, 3) if machines is not None else None,
         }
     building_plan = planned_belts.get("Building")
     backlog_sets = building_plan / belts_per_set if building_plan is not None else None

@@ -22,6 +22,14 @@ class ActualShiftCalibrationTests(unittest.TestCase):
         self.assertEqual(result["processes"]["Cutting"]["scheduled_machine_hours"], 28)
         self.assertEqual(result["processes"]["Flipping"]["scheduled_machine_hours"], 92)
 
+    def test_availability_is_accepted_and_reported(self):
+        result = calibrate_actual_shift(
+            planned_belts={}, actual_belts={}, machine_allocations={"Building": 7},
+            availability_pct={"Building": 80},
+        )
+        self.assertEqual(result["processes"]["Building"]["availability_pct"], 80)
+        self.assertEqual(result["processes"]["Building"]["effective_available_machine_hours"], 44.8)
+
     def test_vrc_and_pot_are_separate(self):
         result = calibrate_actual_shift(
             planned_belts={"VRC": 10130, "POT": 2021},

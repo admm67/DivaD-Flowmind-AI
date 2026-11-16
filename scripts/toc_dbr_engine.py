@@ -23,11 +23,11 @@ DEFAULT_PROCESSING_SECONDS = {
 @dataclass(frozen=True)
 class SimulationConfig:
     shifts: int = 1
-    building_machines: int = 1
-    cutting_machines: int = 1
-    flipping_machines: int = 2
-    curing_machines: int = 4
-    coding_machines: int = 1
+    building_machines: float = 1
+    cutting_machines: float = 1
+    flipping_machines: float = 2
+    curing_machines: float = 4
+    coding_machines: float = 1
     backlog: int = 100
 
     def validate(self) -> None:
@@ -36,10 +36,10 @@ class SimulationConfig:
         if not isinstance(self.backlog, int) or isinstance(self.backlog, bool) or not 0 <= self.backlog <= 100_000:
             raise ValueError("backlog must be an integer between 0 and 100000")
         for name, value in self.machine_counts().items():
-            if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 50:
-                raise ValueError(f"{name} machines must be an integer between 1 and 50")
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0.5 <= value <= 50:
+                raise ValueError(f"{name} machine equivalents must be between 0.5 and 50")
 
-    def machine_counts(self) -> dict[str, int]:
+    def machine_counts(self) -> dict[str, float]:
         return {
             "Building": self.building_machines, "Cutting": self.cutting_machines,
             "Flipping": self.flipping_machines, "Curing": self.curing_machines,
@@ -99,7 +99,11 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
             return
         active_break = _active_break(at, breaks)
         for station in STATION_ORDER:
-            capacity = machines[station]
+            allocation = float(machines[station])
+            whole = math.floor(allocation)
+            fraction = allocation - whole
+            shift_elapsed = at % (8 * 3600)
+            capacity = whole + (1 if fraction > 0 and shift_elapsed < fraction * 8 * 3600 else 0)
             if active_break:
                 capacity = math.ceil(capacity / 2) if station == "Curing" else 0
             while in_process[station] < capacity and queues[station] > 0:
@@ -146,6 +150,7 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
         installed_machine_seconds = machines[station] * duration
         station_report[station] = {
             "machines": machines[station],
+            "machine_equivalents": machines[station],
             "processing_seconds_per_set": DEFAULT_PROCESSING_SECONDS[station],
             "started_sets": started[station],
             "completed_sets": completed[station],
@@ -182,7 +187,8 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
             "Finite initial backlog; no replenishment during the run.",
             "No scrap, rework, downtime, setup losses, or quality holds.",
             "Processing continues after a job starts, including across breaks.",
-            "Breaks prevent new starts at non-curing stations; curing new-start capacity is ceil(machine count / 2).",
+            "Fractional machine equivalents represent partial-shift deployment at the start of each shift.",
+            "Breaks prevent new starts at non-curing stations; curing new-start capacity is ceil(active machine slots / 2).",
             "Buffers are unlimited; blocking from a full downstream buffer is not modeled.",
             "Utilization is busy machine-seconds divided by installed machine-seconds over the full shift calendar, including breaks.",
         ],
