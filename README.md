@@ -60,6 +60,8 @@ The repository includes a `render.yaml` blueprint. To deploy this branch on Rend
 
 https://flowmind-toc-dbr-api-ru1w.onrender.com
 
+https://flowmind-toc-dbr-api-ru1w.onrender.com/docs?utm_source=chatgpt.com#/
+
 ## Optional simulator
 ```bash
 python scripts/flow_simulator.py --steps 100 --stations 5 --capacity-min 1 --capacity-max 6 --seed 7
