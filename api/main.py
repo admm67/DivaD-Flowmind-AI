@@ -31,6 +31,8 @@ class CompareRequest(BaseModel):
 class ReverseCapacityRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     demand_sets: int = Field(default=1100, ge=1, le=100_000, description="Total production order quantity across all shifts, not a per-shift target")
+    target_finished_sets: int | None = Field(default=None, ge=1, le=100_000, description="Legacy alias; interpreted as total order quantity, never per-shift output")
+    backlog: int | None = Field(default=None, ge=0, le=100_000, description="Legacy alias for total order quantity")
     utilization_limit_pct: float = Field(default=85, ge=1, le=100)
     shifts: int = Field(default=3, ge=1, le=20, description="Number of consecutive shifts in the balanced-allocation scenario")
     allocation_mode: str = Field(default="both", pattern="^(both|fractional|whole)$")
@@ -57,7 +59,7 @@ def defaults() -> dict:
         "processing_seconds_per_set":DEFAULT_PROCESSING_SECONDS,
         "default_configuration":ScenarioRequest().model_dump(),
         "breaks":[{"name":b.name,"start_seconds":b.start_seconds,"end_seconds":b.end_seconds} for b in build_breaks(1)],
-        "break_rule":"During breaks, non-curing stations do not start new jobs. Curing may start jobs at ceil(active curing machine slots / 2). Jobs already processing continue."}
+        "break_rule":"During breaks, non-curing stations do not start new jobs. Curing may start jobs at ceil(installed curing machines / 2). Jobs already processing continue."}
 
 @app.post("/simulation/run")
 def run_simulation(request: ScenarioRequest) -> dict:
@@ -75,7 +77,12 @@ def reverse_capacity_calculation(request: ReverseCapacityRequest = Body(openapi_
         "value":{"demand_sets":1100,"utilization_limit_pct":85,"shifts":3,"allocation_mode":"both"}
     }
 })) -> dict:
-    return calculate_reverse_capacity(demand_sets=request.demand_sets,
+    demand = request.demand_sets
+    if request.target_finished_sets is not None:
+        demand = request.target_finished_sets
+    if request.backlog is not None:
+        demand = request.backlog
+    return calculate_reverse_capacity(demand_sets=demand,
         utilization_limit_pct=request.utilization_limit_pct,shifts=request.shifts,
         allocation_mode=request.allocation_mode)
 
