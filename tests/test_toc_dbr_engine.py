@@ -47,7 +47,11 @@ class TocDbrEngineTests(unittest.TestCase):
     def test_invalid_machine_count(self):
         with self.assertRaises(ValueError): simulate(SimulationConfig(building_machines=0))
 
-    def test_shift_horizon_up_to_twenty(self):
-        self.assertEqual(len(simulate(SimulationConfig(shifts=4,backlog=1))["shift_finished_sets"]),4)
+    def test_long_shift_horizon_and_per_shift_machine_schedule(self):
+        schedule = tuple({"Building": 5 if index % 3 == 0 else 8, "Cutting": 6,
+                          "Flipping": 16, "Curing": 34, "Coding": 9} for index in range(75))
+        result = simulate(SimulationConfig(shifts=75, backlog=5, shift_machine_schedule=schedule))
+        self.assertEqual(len(result["shift_finished_sets"]), 75)
+        self.assertEqual(result["stations"]["Building"]["scheduled_machine_equivalents_by_shift"][0], 5)
 
 if __name__=="__main__": unittest.main()
