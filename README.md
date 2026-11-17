@@ -55,6 +55,17 @@ A first deterministic Python discrete-event engine is now available at [scripts/
 
 The Python engine is an initial model, not yet a validated production digital twin. A FastAPI service is now available in `api/main.py` with `/health`, `/simulation/defaults`, `/simulation/run`, and `/simulation/scenarios/compare` endpoints. The browser UI and ChatGPT are not yet connected. See [the integration architecture](docs/TOC_DBR_INTEGRATION_ARCHITECTURE.md).
 
+### FlowMind v0.4.0 capacity planning
+
+`POST /capacity/reverse` provides two validated planning modes for one mandatory total demand quantity:
+
+- `reverse`: finds the minimum whole-machine engagement that completes demand in the selected horizon.
+- `production`: uses the permitted shift engagement to report maximum output, remaining demand, and the shifts required to finish the order where it is achievable.
+
+Choose `planning_horizon_unit` as `day`, `week`, or `month` and set `planning_horizon_value`. The defaults yield 3 shifts/day, 18 shifts/week (six configurable working days), and 75 shifts/month (25 configurable working days). Longer horizons are supported. Every scenario uses the same forward discrete-event simulator, with Building as the only release step and continuous WIP through Cutting, Flipping, Curing, and Coding.
+
+The schedule is I (00:00–08:00), II (08:00–16:00), III (16:00–00:00). Capacity escalates II then III then I; II/III may engage at most 90% of a pool and I at most 85%. I-shift Building starts at 50% and may elevate when needed, while Curing and Coding retain I-shift priority. The API documents examples in Swagger at `/docs`.
+
 ### Run the API on a hosted Python service
 The repository includes a `render.yaml` blueprint. To deploy this branch on Render, create a new Blueprint instance from this repository and select `feature/toc-dbr-engine`. The API start command is `uvicorn api.main:app --host 0.0.0.0 --port $PORT`. Do not expose privileged credentials in browser code.
 
