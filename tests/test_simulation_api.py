@@ -26,17 +26,27 @@ class SimulationApiFractionalMachineTests(unittest.TestCase):
         self.assertEqual(response.json()["baseline"]["configuration"]["flipping_machines"], 2.5)
         self.assertEqual(response.json()["proposed"]["configuration"]["curing_machines"], 4.5)
 
-    def test_reverse_capacity_endpoint_returns_both_modes(self):
+    def test_reverse_capacity_requires_total_demand(self):
+        response = client.post("/capacity/reverse", json={})
+        self.assertEqual(response.status_code, 422)
+
+    def test_reverse_capacity_endpoint_supports_reverse_and_production_modes(self):
         response = client.post("/capacity/reverse", json={
-            "target_finished_sets": 8,
-            "utilization_limit_pct": 85,
-            "shifts": 1,
-            "backlog": 8,
-            "allocation_mode": "both",
+            "demand_sets": 8,
+            "mode": "reverse",
+            "planning_horizon_value": 1,
+            "planning_horizon_unit": "day",
+            "max_actual_shifts": 20,
         })
         self.assertEqual(response.status_code, 200)
-        self.assertIn("fractional", response.json()["recommendations"])
-        self.assertIn("whole", response.json()["recommendations"])
+        self.assertEqual(response.json()["planning_horizon"]["shifts"], 3)
+        self.assertIn("actual_shifts_required", response.json())
+        production = client.post("/capacity/reverse", json={
+            "demand_sets": 10000, "mode": "production", "planning_horizon_value": 1,
+            "planning_horizon_unit": "day", "max_actual_shifts": 30,
+        })
+        self.assertEqual(production.status_code, 200)
+        self.assertGreater(production.json()["remaining_demand"], 0)
 
 
     def test_actual_shift_calibration_accepts_availability_pct(self):
