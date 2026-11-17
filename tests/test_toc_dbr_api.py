@@ -21,7 +21,7 @@ class TocDbrApiTests(unittest.TestCase):
         response = client.post("/simulation/run", json={"backlog": 50})
         self.assertEqual(response.status_code, 200)
         result = response.json()
-        self.assertEqual(result["finished_sets"] + result["end_wip"], 50)
+        self.assertEqual(result["finished_sets"] + result["end_wip"] + result["remaining_unreleased_demand"], 50)
         self.assertEqual(sum(result["hourly_completed_sets"]), result["finished_sets"])
 
     def test_rejects_invalid_machine_count(self):

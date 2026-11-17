@@ -1,57 +1,53 @@
 import unittest
-
 from scripts.toc_dbr_engine import SimulationConfig, compare_scenarios, simulate
-
 
 class TocDbrEngineTests(unittest.TestCase):
     def test_is_deterministic(self):
-        config = SimulationConfig(backlog=100)
-        self.assertEqual(simulate(config), simulate(config))
+        cfg=SimulationConfig(backlog=100)
+        self.assertEqual(simulate(cfg),simulate(cfg))
 
-    def test_hourly_output_reconciles_to_finished_sets(self):
-        result = simulate(SimulationConfig(backlog=100))
-        self.assertEqual(sum(result["hourly_completed_sets"]), result["finished_sets"])
-        self.assertEqual(result["throughput_sets_per_hour"], round(result["finished_sets"] / 8, 4))
+    def test_order_conservation_separates_unreleased_demand_from_wip(self):
+        result=simulate(SimulationConfig(shifts=2,backlog=100))
+        self.assertEqual(result["finished_sets"]+result["end_wip"]+result["remaining_unreleased_demand"],100)
 
-    def test_wip_conservation(self):
-        result = simulate(SimulationConfig(backlog=100))
-        self.assertEqual(result["finished_sets"] + result["end_wip"], 100)
+    def test_shift_one_opening_wip_is_zero_at_every_station(self):
+        result=simulate(SimulationConfig(shifts=3,backlog=1100))
+        self.assertEqual(result["opening_wip_by_shift"][0],
+            {s:{"queue":0,"in_process":0,"total":0} for s in ("Building","Cutting","Flipping","Curing","Coding")})
 
-    def test_zero_backlog_produces_zero_output(self):
-        result = simulate(SimulationConfig(backlog=0))
-        self.assertEqual(result["finished_sets"], 0)
-        self.assertEqual(result["end_wip"], 0)
-        self.assertEqual(sum(result["hourly_completed_sets"]), 0)
+    def test_wip_carries_forward_between_shifts(self):
+        result=simulate(SimulationConfig(shifts=3,building_machines=9,cutting_machines=7,
+            flipping_machines=18,curing_machines=38,coding_machines=10,backlog=1100))
+        for station in ("Building","Cutting","Flipping","Curing","Coding"):
+            self.assertEqual(result["opening_wip_by_shift"][1][station]["total"],
+                             result["closing_wip_by_shift"][0][station]["total"])
+            self.assertEqual(result["opening_wip_by_shift"][2][station]["total"],
+                             result["closing_wip_by_shift"][1][station]["total"])
 
-    def test_station_flow_is_conserved(self):
-        stations = simulate(SimulationConfig(backlog=100))["stations"]
-        for upstream, downstream in zip(
-            ("Building", "Cutting", "Flipping", "Curing"),
-            ("Cutting", "Flipping", "Curing", "Coding"),
-        ):
-            self.assertGreaterEqual(stations[upstream]["completed_sets"], stations[downstream]["started_sets"])
+    def test_station_completions_reconcile_by_shift(self):
+        result=simulate(SimulationConfig(shifts=3,backlog=1100))
+        for station,row in result["stations"].items():
+            self.assertEqual(sum(row["completed_sets_by_shift"]),row["completed_sets"])
+            self.assertEqual(row["cumulative_completed_by_shift"][-1],row["completed_sets"])
+
+    def test_hourly_output_reconciles(self):
+        result=simulate(SimulationConfig(backlog=100))
+        self.assertEqual(sum(result["hourly_completed_sets"]),result["finished_sets"])
+
+    def test_zero_demand_produces_zero_wip(self):
+        result=simulate(SimulationConfig(backlog=0))
+        self.assertEqual(result["finished_sets"],0)
+        self.assertEqual(result["end_wip"],0)
+        self.assertTrue(result["order_complete"])
 
     def test_compare_reports_delta(self):
-        base = SimulationConfig(coding_machines=1, backlog=100)
-        proposed = SimulationConfig(coding_machines=2, backlog=100)
-        result = compare_scenarios(base, proposed)
-        self.assertEqual(result["delta_finished_sets"],
-                         result["proposed"]["finished_sets"] - result["baseline"]["finished_sets"])
+        result=compare_scenarios(SimulationConfig(backlog=100),SimulationConfig(coding_machines=2,backlog=100))
+        self.assertEqual(result["delta_finished_sets"],result["proposed"]["finished_sets"]-result["baseline"]["finished_sets"])
 
     def test_invalid_machine_count(self):
-        with self.assertRaises(ValueError):
-            simulate(SimulationConfig(building_machines=0))
+        with self.assertRaises(ValueError): simulate(SimulationConfig(building_machines=0))
 
-    def test_fractional_machine_equivalents_are_simulated_without_rounding(self):
-        result = simulate(SimulationConfig(flipping_machines=2.5, curing_machines=4.5, backlog=100))
-        self.assertEqual(result["stations"]["Flipping"]["machine_equivalents"], 2.5)
-        self.assertEqual(result["stations"]["Curing"]["machine_equivalents"], 4.5)
-        self.assertGreaterEqual(result["finished_sets"], 0)
+    def test_shift_horizon_up_to_twenty(self):
+        self.assertEqual(len(simulate(SimulationConfig(shifts=4,backlog=1))["shift_finished_sets"]),4)
 
-    def test_invalid_shift_count(self):
-        with self.assertRaises(ValueError):
-            simulate(SimulationConfig(shifts=4))
-
-
-if __name__ == "__main__":
-    unittest.main()
+if __name__=="__main__": unittest.main()

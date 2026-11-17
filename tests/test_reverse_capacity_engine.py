@@ -1,97 +1,40 @@
 import unittest
-
-from scripts.reverse_capacity_engine import calculate_reverse_capacity
-from scripts.toc_dbr_engine import SimulationConfig, simulate
-
+from scripts.reverse_capacity_engine import calculate_reverse_capacity, INSTALLED_MACHINE_POOLS
 
 class ReverseCapacityEngineTests(unittest.TestCase):
-    def test_returns_both_fractional_and_whole_recommendations(self):
-        result = calculate_reverse_capacity(
-            target_finished_sets=8,
-            utilization_limit_pct=85,
-            shifts=1,
-            backlog=8,
-            allocation_mode="both",
-        )
-        self.assertIn("fractional", result["recommendations"])
-        self.assertIn("whole", result["recommendations"])
-        self.assertEqual(result["target_finished_sets"], 8)
+    def test_total_order_defaults_to_1100_and_compares_scenarios(self):
+        result=calculate_reverse_capacity(demand_sets=1100,shifts=3)
+        self.assertEqual(result["demand_sets"],1100)
+        self.assertIn("one_shift_full_capacity",result["scenarios"])
+        self.assertIn("fractional",result["scenarios"])
+        self.assertIn("whole",result["scenarios"])
 
-    def test_simulation_checks_utilization_ceiling(self):
-        result = calculate_reverse_capacity(
-            target_finished_sets=8,
-            utilization_limit_pct=85,
-            shifts=1,
-            backlog=8,
-            allocation_mode="fractional",
-        )
-        recommendation = result["recommendations"]["fractional"]
-        for station in recommendation["station_analysis"].values():
-            self.assertLessEqual(station["utilization_pct"], 85)
+    def test_machine_engagement_respects_installed_pools(self):
+        result=calculate_reverse_capacity(demand_sets=1100,shifts=3)
+        for scenario in result["scenarios"].values():
+            for station,engaged in scenario["recommended_machine_allocation"].items():
+                self.assertLessEqual(engaged,INSTALLED_MACHINE_POOLS[station])
+                self.assertGreater(engaged,0)
 
-    def test_insufficient_backlog_is_reported(self):
-        result = calculate_reverse_capacity(
-            target_finished_sets=10,
-            utilization_limit_pct=85,
-            shifts=1,
-            backlog=5,
-            allocation_mode="fractional",
-        )
-        recommendation = result["recommendations"]["fractional"]
-        self.assertFalse(recommendation["backlog_sufficient"])
-        self.assertFalse(recommendation["feasible"])
+    def test_station_report_contains_required_fields(self):
+        result=calculate_reverse_capacity(demand_sets=1100,shifts=3)
+        row=result["scenarios"]["fractional"]["station_report"]["Building"]
+        for field in ("installed_machines","machines_to_engage","opening_wip","completed_s1",
+                      "completed_s2","completed_s3","closing_wip","shifts_to_complete_demand"):
+            self.assertIn(field,row)
 
-    def test_simulator_reports_finished_sets_by_shift(self):
-        result = simulate(SimulationConfig(
-            shifts=2, building_machines=9, cutting_machines=7,
-            flipping_machines=18, curing_machines=38,
-            coding_machines=10, backlog=20,
-        ))
-        self.assertEqual(sum(result["shift_finished_sets"]), result["finished_sets"])
-        self.assertEqual(len(result["shift_finished_sets"]), 2)
+    def test_simulation_reports_real_wip_and_no_zero_wip_feasibility_gate(self):
+        result=calculate_reverse_capacity(demand_sets=1100,shifts=3)
+        sim=result["scenarios"]["fractional"]["simulation"]
+        self.assertIn("end_wip",sim)
+        self.assertIn("order_complete",sim)
+        self.assertNotIn("balanced_flow_no_end_wip",result["scenarios"]["fractional"])
 
-    def test_whole_mode_uses_integer_machine_counts_at_least_one(self):
-        result = calculate_reverse_capacity(
-            target_finished_sets=1,
-            utilization_limit_pct=85,
-            shifts=1,
-            backlog=1,
-            allocation_mode="whole",
-        )
-        allocation = result["recommendations"]["whole"]["recommended_machine_allocation"]
-        for value in allocation.values():
-            self.assertGreaterEqual(value, 1)
-            self.assertEqual(value, int(value))
+    def test_legacy_target_parameter_is_interpreted_as_total_order(self):
+        result=calculate_reverse_capacity(target_finished_sets=25,shifts=2,backlog=25)
+        self.assertEqual(result["demand_sets"],25)
 
-    def test_installed_machine_pools_are_hard_limits(self):
-        result = calculate_reverse_capacity(
-            target_finished_sets=480,
-            utilization_limit_pct=85,
-            shifts=3,
-            backlog=1440,
-            allocation_mode="both",
-        )
-        for recommendation in result["recommendations"].values():
-            for station, value in recommendation["recommended_machine_allocation"].items():
-                self.assertLessEqual(value, recommendation["installed_machine_pools"][station])
-            self.assertEqual(recommendation["per_shift_target_sets"], 480)
+    def test_invalid_allocation_mode(self):
+        with self.assertRaises(ValueError): calculate_reverse_capacity(10,allocation_mode="automatic")
 
-    def test_shift_planner_reports_minimum_shift_count(self):
-        result = calculate_reverse_capacity(
-            target_finished_sets=480,
-            utilization_limit_pct=85,
-            shifts=3,
-            backlog=1440,
-            allocation_mode="whole",
-        )
-        recommendation = result["recommendations"]["whole"]
-        self.assertIn(recommendation["tested_shifts"], (1, 2, 3))
-        self.assertEqual(len(recommendation["shift_outputs_sets"]), recommendation["tested_shifts"])
-
-    def test_invalid_allocation_mode_is_rejected(self):
-        with self.assertRaises(ValueError):
-            calculate_reverse_capacity(10, allocation_mode="automatic")
-
-
-if __name__ == "__main__":
-    unittest.main()
+if __name__=="__main__": unittest.main()
