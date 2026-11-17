@@ -42,7 +42,7 @@ def _balanced_allocation(demand: int, shifts: int, limit: float, step: float) ->
     for station, seconds in DEFAULT_PROCESSING_SECONDS.items():
         raw = demand * seconds / (shifts * 8 * 3600 * (limit/100))
         value = math.ceil((raw-1e-10)/step)*step
-        alloc[station] = min(float(INSTALLED_MACHINE_POOLS[station]), max(step, round(value, 3)))
+        alloc[station] = min(float(INSTALLED_MACHINE_POOLS[station]), max(0.5, round(value, 3)))
     result = _run(alloc, shifts, demand)
     iterations = 0
     while iterations < 2000:
@@ -115,6 +115,7 @@ def calculate_reverse_capacity(
             },
             **balanced,
         },
+        "recommendations": balanced,
         "bottleneck_screening": {
             "one_shift_full_capacity": one_result["constraint_screening"]["highest_calendar_utilization_station"],
             **{k: v["simulation"]["constraint_screening"]["highest_calendar_utilization_station"] for k,v in balanced.items()},
