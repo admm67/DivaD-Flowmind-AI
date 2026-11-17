@@ -7,7 +7,7 @@ import itertools
 import math
 from typing import Any
 
-ENGINE_VERSION = "0.2.0"
+ENGINE_VERSION = "0.4.0"
 STATION_ORDER = ("Building", "Cutting", "Flipping", "Curing", "Coding")
 DEFAULT_PROCESSING_SECONDS = {
     "Building": 379.2, "Cutting": 240.0, "Flipping": 600.0,
@@ -25,15 +25,28 @@ class SimulationConfig:
     curing_machines: float = 4
     coding_machines: float = 1
     backlog: int = 100
+    # Optional per-shift allocations.  This is deliberately part of the core
+    # configuration so capacity planning and production scenarios use the same
+    # forward simulator.
+    shift_machine_schedule: tuple[dict[str, float], ...] | None = None
 
     def validate(self) -> None:
-        if isinstance(self.shifts, bool) or not isinstance(self.shifts, int) or not 1 <= self.shifts <= 20:
-            raise ValueError("shifts must be an integer between 1 and 20")
+        if isinstance(self.shifts, bool) or not isinstance(self.shifts, int) or not 1 <= self.shifts <= 1_000:
+            raise ValueError("shifts must be an integer between 1 and 1000")
         if isinstance(self.backlog, bool) or not isinstance(self.backlog, int) or not 0 <= self.backlog <= 100_000:
             raise ValueError("backlog must be an integer between 0 and 100000")
         for name, value in self.machine_counts().items():
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0.5 <= value <= 50:
                 raise ValueError(f"{name} machine equivalents must be between 0.5 and 50")
+        if self.shift_machine_schedule is not None:
+            if len(self.shift_machine_schedule) != self.shifts:
+                raise ValueError("shift_machine_schedule must contain one allocation for every shift")
+            for allocation in self.shift_machine_schedule:
+                if set(allocation) != set(STATION_ORDER):
+                    raise ValueError("each shift allocation must contain every station")
+                for name, value in allocation.items():
+                    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0 or value > 50:
+                        raise ValueError(f"{name} scheduled machine equivalents must be between 0 and 50")
 
     def machine_counts(self) -> dict[str, float]:
         return {"Building": self.building_machines, "Cutting": self.cutting_machines,
@@ -67,6 +80,7 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
     config = config or SimulationConfig()
     config.validate()
     machines = config.machine_counts()
+    schedule = config.shift_machine_schedule
     duration = config.shifts * SHIFT_SECONDS
     breaks = build_breaks(config.shifts)
     queues = {name: 0 for name in STATION_ORDER}
@@ -96,7 +110,8 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
             return
         active_break = _active_break(at, breaks)
         for station in STATION_ORDER:
-            allocation = float(machines[station])
+            shift_idx = min(int(at // SHIFT_SECONDS), config.shifts - 1)
+            allocation = float(schedule[shift_idx][station] if schedule else machines[station])
             whole = math.floor(allocation)
             fraction = allocation - whole
             elapsed = at % SHIFT_SECONDS
@@ -155,9 +170,11 @@ def simulate(config: SimulationConfig | None = None) -> dict[str, Any]:
     stations: dict[str, Any] = {}
     for s in STATION_ORDER:
         end = closing_wip[-1][s]
-        installed_seconds = machines[s] * duration
+        installed_seconds = (sum(shift[s] for shift in schedule) * SHIFT_SECONDS
+                             if schedule else machines[s] * duration)
         stations[s] = {
             "machines": machines[s], "machine_equivalents": machines[s],
+            "scheduled_machine_equivalents_by_shift": [shift[s] for shift in schedule] if schedule else [machines[s]] * config.shifts,
             "processing_seconds_per_set": DEFAULT_PROCESSING_SECONDS[s],
             "started_sets": started[s], "completed_sets": completed[s],
             "completed_sets_by_shift": shift_completed[s],
