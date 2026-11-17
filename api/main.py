@@ -13,7 +13,7 @@ app = FastAPI(title="FlowMind TOC-DBR API",
 
 class ScenarioRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    shifts: int = Field(default=1, ge=1, le=20)
+    shifts: int = Field(default=1, ge=1, le=1000)
     building_machines: float = Field(default=1, ge=0.5, le=50)
     cutting_machines: float = Field(default=1, ge=0.5, le=50)
     flipping_machines: float = Field(default=2, ge=0.5, le=50)
@@ -30,12 +30,13 @@ class CompareRequest(BaseModel):
 
 class ReverseCapacityRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    demand_sets: int = Field(default=1100, ge=1, le=100_000, description="Total production order quantity across all shifts, not a per-shift target")
-    target_finished_sets: int | None = Field(default=None, ge=1, le=100_000, description="Legacy alias; interpreted as total order quantity, never per-shift output")
-    backlog: int | None = Field(default=None, ge=0, le=100_000, description="Legacy alias for total order quantity")
-    utilization_limit_pct: float = Field(default=85, ge=1, le=100)
-    shifts: int = Field(default=3, ge=1, le=20, description="Number of consecutive shifts in the balanced-allocation scenario")
-    allocation_mode: str = Field(default="both", pattern="^(both|fractional|whole)$")
+    demand_sets: int = Field(..., ge=1, le=100_000, description="Required total production order quantity; mandatory and never defaulted")
+    mode: str = Field(default="reverse", pattern="^(reverse|production)$", description="reverse finds minimum feasible engagement; production reports maximum achievable output")
+    planning_horizon_value: int = Field(default=1, ge=1, le=333, description="Number of selected days, weeks, or months")
+    planning_horizon_unit: str = Field(default="day", pattern="^(day|week|month)$")
+    working_days_per_week: int = Field(default=6, ge=1, le=7)
+    working_days_per_month: int = Field(default=25, ge=1, le=31)
+    max_actual_shifts: int = Field(default=1000, ge=1, le=1000, description="Search limit when calculating shifts required to finish total demand")
 
 class ActualShiftRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -71,20 +72,20 @@ def compare(request: CompareRequest) -> dict:
 
 @app.post("/capacity/reverse")
 def reverse_capacity_calculation(request: ReverseCapacityRequest = Body(openapi_examples={
-    "total_order_1100": {
-        "summary":"Complete one 1,100-set order",
-        "description":"Shift 1 starts with zero WIP. Subsequent shifts carry forward WIP. Compare one-shift full capacity with a balanced three-shift allocation.",
-        "value":{"demand_sets":1100,"utilization_limit_pct":85,"shifts":3,"allocation_mode":"both"}
+    "reverse_one_week": {
+        "summary":"Minimum machine engagement for a 1,100-set order in one six-day week",
+        "description":"II then III then I escalation; WIP carries continuously and the forward simulator validates the plan.",
+        "value":{"demand_sets":1100,"mode":"reverse","planning_horizon_value":1,"planning_horizon_unit":"week","working_days_per_week":6}
+    },
+    "production_one_month": {
+        "summary":"Maximum production over a 75-shift month",
+        "value":{"demand_sets":10000,"mode":"production","planning_horizon_value":1,"planning_horizon_unit":"month","working_days_per_month":25}
     }
 })) -> dict:
-    demand = request.demand_sets
-    if request.target_finished_sets is not None:
-        demand = request.target_finished_sets
-    if request.backlog is not None:
-        demand = request.backlog
-    return calculate_reverse_capacity(demand_sets=demand,
-        utilization_limit_pct=request.utilization_limit_pct,shifts=request.shifts,
-        allocation_mode=request.allocation_mode)
+    return calculate_reverse_capacity(demand_sets=request.demand_sets, mode=request.mode,
+        planning_horizon_value=request.planning_horizon_value, planning_horizon_unit=request.planning_horizon_unit,
+        working_days_per_week=request.working_days_per_week, working_days_per_month=request.working_days_per_month,
+        max_actual_shifts=request.max_actual_shifts)
 
 @app.post("/calibration/actual-shift")
 def actual_shift_calibration(request: ActualShiftRequest) -> dict:
